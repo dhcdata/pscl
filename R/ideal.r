@@ -13,7 +13,8 @@ ideal <- function(object,
                   startvals="eigen",
                   store.item=FALSE,
                   file=NULL,
-                  verbose=FALSE){
+                  verbose=FALSE,
+                  use.voter=NULL){
 
   cat("ideal: analysis of roll call data via Markov chain Monte Carlo methods.\n\n")
 
@@ -109,6 +110,13 @@ ideal <- function(object,
   m <- dim(y$votes)[2]
   legis.names <- dimnames(y$votes)[[1]]
   vote.names <- dimnames(y$votes)[[2]]
+
+  if (!is.null(use.voter)) {
+      if (!is.vector(use.voter))
+          stop("use.voter must be a vector of length n")
+      if (n != length(use.voter))
+          stop("use.voter must be a vector of length n")
+  }
 
   ## map roll call votes into binary format required by ideal
   if(verbose){
@@ -392,30 +400,57 @@ ideal <- function(object,
     cat("\n", file=file, append=TRUE)
     output <- .C("IDEAL",
                  PACKAGE=.package.Name,
-                 as.integer(n), as.integer(m), as.integer(d), as.double(yToC), 
-                 as.integer(maxiter), as.integer(thin), as.integer(impute),
-                 as.integer(mda),
-                 as.double(xp), as.double(xpv), as.double(bp),
-                 as.double(bpv), as.double(xstart), as.double(bstart),
-                 xoutput=NULL,
-                 boutput=NULL,as.integer(burnin),
-                 as.integer(usefile), as.integer(store.item), as.character(file),
-                 as.integer(verbose))
+                 as.integer(n),           #1
+                 as.integer(m),           #2
+                 as.integer(d),           #3
+                 as.double(yToC),         #4
+                 as.integer(maxiter),     #5
+                 as.integer(thin),        #6
+                 as.integer(impute),      #7
+                 as.integer(mda),         #8
+                 as.double(xp),           #9
+                 as.double(xpv),          #10
+                 as.double(bp),           #11
+                 as.double(bpv),          #12
+                 as.double(xstart),       #13
+                 as.double(bstart),       #14
+                 xoutput=0,               #15
+                 boutput=0,               #16
+                 as.integer(burnin),      #17
+                 usefile,                 #18
+                 as.logical(store.item),              #19
+                 as.character(file),      #20
+                 as.logical(verbose),     #21
+                 as.logical(!is.null(use.voter)),   #22 
+                 as.integer(use.voter))   #23
   }
   ## not saving output to file, saving output to memory
-  else if (!store.item) {
+  else if (!store.item) {   ## but not saving item parameters
     output <- .C("IDEAL",
                  PACKAGE=.package.Name,
-                 as.integer(n), as.integer(m), as.integer(d), as.double(yToC), 
-                 as.integer(maxiter), as.integer(thin), as.integer(impute),
+                 as.integer(n), 
+                 as.integer(m), 
+                 as.integer(d), 
+                 as.double(yToC), 
+                 as.integer(maxiter), 
+                 as.integer(thin), 
+                 as.integer(impute),
                  as.integer(mda),
-                 as.double(xp), as.double(xpv), as.double(bp),
-                 as.double(bpv), as.double(xstart), as.double(bstart),
+                 as.double(xp), 
+                 as.double(xpv), 
+                 as.double(bp),
+                 as.double(bpv), 
+                 as.double(xstart), 
+                 as.double(bstart),
                  xoutput=as.double(rep(0,n*d*numrec)),
-                 boutput=as.double(0),
+                 boutput=0,
                  as.integer(burnin),
-                 as.integer(usefile), as.integer(store.item), as.character(file),
-                 as.integer(verbose))
+                 usefile, 
+                 as.logical(store.item), 
+                 as.character(file),
+                 as.logical(verbose), 
+                 as.logical(!is.null(use.voter)), 
+                 as.integer(use.voter))
   }
   else {
     output <- .C("IDEAL",
@@ -426,9 +461,14 @@ ideal <- function(object,
                  as.double(xp), as.double(xpv), as.double(bp),
                  as.double(bpv), as.double(xstart), as.double(bstart),
                  xoutput=as.double(rep(0,n*d*numrec)),
-                 boutput=as.double(rep(0,m*(d+1)*numrec)),as.integer(burnin),
-                 as.integer(usefile), as.integer(store.item), as.character(file),
-                 as.integer(verbose))
+                 boutput=as.double(rep(0,m*(d+1)*numrec)), 
+                 as.integer(burnin),
+                 usefile, 
+                 as.logical(store.item), 
+                 as.character(file),
+                 as.logical(verbose), 
+                 as.logical(!is.null(use.voter)), 
+                 as.integer(use.voter))
   }
 
   cat("\n")
@@ -441,7 +481,6 @@ ideal <- function(object,
     keep <- itervec > burnin
 
     ## ideal points
-    print(output$xoutput[1:(n*d)])
     x <- array(output$xoutput,
                c(n,d,numrec))
     
@@ -459,7 +498,6 @@ ideal <- function(object,
     ###############################################################
     ## item parameters
     if(store.item){
-      print(vote.names)
       b <- array(output$boutput,c(m,d+1,numrec))  ## votes by parameters by iters
       dimnames(b) <- list(vote.names,
                           c(paste("Discrimination D",1:d,sep=""),
